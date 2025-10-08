@@ -3,21 +3,27 @@ using HtmlAgilityPack.CssSelectors.NetCore;
 using System.Net;
 using WebScraper.Models;
 using WebScraper.Services.Interfaces;
+using MongoDB.Bson;
 
 namespace WebScraper.Services;
 
 class WebScraperService : IWebScraperService
 {
     private readonly IScrapConfigurationProvider _scrapConfiguration;
+    private readonly IProductRepository _productRepository;
     private readonly HttpClient _http = new HttpClient();
 
     public WebScraperService(
-        IScrapConfigurationProvider scrapConfiguration)
+        IScrapConfigurationProvider scrapConfiguration,
+        IProductRepository productRepository)
     {
         _scrapConfiguration = scrapConfiguration;
+        _productRepository = productRepository;
     }
-    public void Scrap(string url, ScrapConfiguration scrapConfiguration = null)
+
+    public async void Scrap(string url, ScrapConfiguration scrapConfiguration = null)
     {
+        try { 
         var config = scrapConfiguration ?? _scrapConfiguration.GetDefaultConfiguration(url);
 
         // Taking all category links
@@ -26,7 +32,7 @@ class WebScraperService : IWebScraperService
             .QuerySelectorAll(config.Category.CategorySelector)
             .Select(a => a.GetAttributeValue("href", null))
             .Where(h => !string.IsNullOrWhiteSpace(h))
-            .Distinct()
+            .Distinct().Take(1) // USUN TO
             .ToList();
 
         var items = new List<Product>();
@@ -72,7 +78,29 @@ class WebScraperService : IWebScraperService
             .Select(g => g.First())
             .ToList();
 
-        SaveCsv("test5.csv", dedup);
+        // Initialize Id for each product
+        foreach (var product in dedup)
+        {
+            if (string.IsNullOrEmpty(product.Id))
+            {
+                product.Id = ObjectId.GenerateNewId().ToString();
+            }
+        }
+
+        // Save to MongoDB
+        
+        
+            await _productRepository.CreateManyAsync(dedup);
+            // Also save to CSV for backup
+            SaveCsv("test5.csv", dedup);
+        }
+        catch (Exception ex)
+        {
+            
+            throw;
+        }
+        
+      
     }
 
     private string? GetSkuFromProduct(string? productUrl, string productSkuSelector)

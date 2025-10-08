@@ -7,8 +7,7 @@ services:
       - "5341:80"
     environment:
       - ACCEPT_EULA=Y
-    volumes:
-      - seq_data:/data
+    
     restart: unless-stopped
     networks:
       - webnet
@@ -24,8 +23,17 @@ services:
   #   networks:
   #     - webnet
 
-volumes:
-  seq_data:
+  mongodb:
+    image: mongo:7.0.8
+   
+    ports:
+      - "27017:27017"
+
+
+  
+
+
+
 
 networks:
   webnet:
