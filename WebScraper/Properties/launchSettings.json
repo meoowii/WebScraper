@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "WebScraper": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}

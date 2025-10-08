@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  seq:
+    image: datalust/seq:latest
+    ports:
+      - "5341:80"
+    environment:
+      - ACCEPT_EULA=Y
+    volumes:
+      - seq_data:/data
+    restart: unless-stopped
+    networks:
+      - webnet
+
+  # webscraper:
+  #   build:
+  #     context: .
+  #     dockerfile: WebScraper/Dockerfile
+  #   depends_on:
+  #     - seq
+  #   environment:
+  #     - Seq__ServerUrl=http://seq:80
+  #   networks:
+  #     - webnet
+
+volumes:
+  seq_data:
+
+networks:
+  webnet:
+    driver: bridge
