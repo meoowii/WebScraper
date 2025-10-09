@@ -23,4 +23,5 @@ public class ProductSelectors
     public string ProductTitleSelector { get; set; } 
     public string ProductPriceSelector { get; set; } 
     public string ProductSkuSelector { get; set; }
+    public string? PriceRegex { get; set; }
 }

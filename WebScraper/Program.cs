@@ -1,6 +1,8 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using MongoDB.Driver;
 using Serilog;
 using WebScraper.Constants;
 using WebScraper.Models;
@@ -13,37 +15,65 @@ class Program
 {
     static async Task Main()
     {
-        var host = Host.CreateDefaultBuilder()
-            .ConfigureAppConfiguration((context, config) =>
-            {
-                config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
-            })
-            .UseSerilog((context, services, configuration) =>
-            {
-                configuration.ReadFrom.Configuration(context.Configuration)
-                             .ReadFrom.Services(services);
-            })
-            .ConfigureServices((context, services) =>
-            {
-                RegisterServices(services);
-            })
-            .Build();
+        try
+        {
+            var host = Host.CreateDefaultBuilder()
+                .ConfigureAppConfiguration((context, config) =>
+                {
+                    config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
+                })
+                .UseSerilog((context, services, configuration) =>
+                {
+                    configuration.ReadFrom.Configuration(context.Configuration)
+                                 .ReadFrom.Services(services);
+                })
+                .ConfigureServices((context, services) =>
+                {
+                    RegisterServices(services, context.Configuration);
+                })
+                .Build();
 
-        await host.StartAsync();
-        //change to scrape with selenium
-        var scraper = host.Services.GetRequiredKeyedService<IWebScraperService>(WebScraperServiceKeys.Http);
+            await host.StartAsync();
 
-        scraper.Scrap(Shops.FashionFreak);
+            var scraper = host.Services.GetRequiredKeyedService<IWebScraperService>(WebScraperServiceKeys.Http);
+            var storage = host.Services.GetRequiredService<IStorageService>();
 
-        await host.StopAsync();
+            var products = await scraper.Scrap(Shops.FashionFreak);
+            await storage.StoreAsync(products, StorageType.Csv | StorageType.Mongo);
+
+            await host.StopAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
     }
 
-    private static void RegisterServices(IServiceCollection services)
+    private static void RegisterServices(IServiceCollection services, IConfiguration configuration)
     {
-        //TODO you can do changes only here - you need to add repository to save data
-        //service registration 
-        services.AddKeyedSingleton<IWebScraperService, WebScraperService>(WebScraperServiceKeys.Http);        
+        // Configure MongoDB settings
+        services.Configure<MongoDbSettings>(configuration.GetSection("MongoDB"));
+
+        // Register MongoDB client and collection
+        services.AddSingleton<IMongoClient>(sp =>
+        {
+            var settings = sp.GetRequiredService<IOptions<MongoDbSettings>>().Value;
+            return new MongoClient(settings.ConnectionString);
+        });
+        services.AddSingleton(sp =>
+        {
+            var settings = sp.GetRequiredService<IOptions<MongoDbSettings>>().Value;
+            var client = sp.GetRequiredService<IMongoClient>();
+            return client.GetDatabase(settings.DatabaseName);
+        });
+
+        // Register repositories
+        services.AddSingleton<IProductRepository, MongoProductRepository>();
+
+        // Register existing services
+        services.AddKeyedSingleton<IWebScraperService, WebScraperService>(WebScraperServiceKeys.Http);
         services.AddKeyedSingleton<IWebScraperService, WebScraperSeleniumService>(WebScraperServiceKeys.Selenium);
         services.AddSingleton<IScrapConfigurationProvider, ScrapConfigurationProvider>();
+        services.AddSingleton<IStorageService, StorageService>();
     }
 }

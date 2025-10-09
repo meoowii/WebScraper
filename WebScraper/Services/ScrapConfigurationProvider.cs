@@ -33,7 +33,8 @@ class ScrapConfigurationProvider : IScrapConfigurationProvider
             ProductContainerSelector = "ul.products li.product",
             ProductTitleSelector = "h2.woocommerce-loop-product__title",
             ProductPriceSelector = "span.woocommerce-Price-amount",
-            ProductSkuSelector = "span.sku"
+            ProductSkuSelector = "span.sku",
+            PriceRegex = @"(?<amount>[\d.,]+)\s?(?<currency>[A-Za-zżźćńółęąśŻŹĆĄŚĘŁÓŃ]+)"
         };
         return new ScrapConfiguration
         { 
