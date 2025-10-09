@@ -1,6 +1,4 @@
-using Microsoft.Extensions.Options;
 using MongoDB.Driver;
-using MongoDB.Bson;
 using WebScraper.Models;
 using WebScraper.Services.Interfaces;
 

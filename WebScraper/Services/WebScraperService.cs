@@ -4,6 +4,8 @@ using System.Net;
 using WebScraper.Models;
 using WebScraper.Services.Interfaces;
 using MongoDB.Bson;
+using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace WebScraper.Services;
 
@@ -12,17 +14,21 @@ class WebScraperService : IWebScraperService
     private readonly IScrapConfigurationProvider _scrapConfiguration;
     private readonly IProductRepository _productRepository;
     private readonly HttpClient _http = new HttpClient();
+    private readonly IStorageService _storageService;
+
 
     public WebScraperService(
         IScrapConfigurationProvider scrapConfiguration,
-        IProductRepository productRepository)
+        IProductRepository productRepository, IStorageService storageService)
     {
         _scrapConfiguration = scrapConfiguration;
         _productRepository = productRepository;
+        _storageService = storageService;
     }
 
-    public async Task Scrap(string url, ScrapConfiguration scrapConfiguration = null)
+    public async Task<List<Product>> Scrap(string url, ScrapConfiguration scrapConfiguration = null)
     {
+        //TODO: Log start scraping + url sklepu
         var config = scrapConfiguration ?? _scrapConfiguration.GetDefaultConfiguration(url);
 
         // Taking all category links
@@ -33,13 +39,13 @@ class WebScraperService : IWebScraperService
             .Where(h => !string.IsNullOrWhiteSpace(h))
             .Distinct()
             .ToList();
-
+        // TODO: Dodac logi ile kategorii zostalo zczytanych
         var items = new List<Product>();
-
+        //TODO: parallel foreach, concurentbag 
         foreach (var categoryUrl in categoryLinks)
         {
             var currentPageUrl = categoryUrl;
-
+            // go through pagination until no next-page
             while (true)
             {
                 var doc = Load(currentPageUrl);
@@ -48,7 +54,12 @@ class WebScraperService : IWebScraperService
                 foreach (var product in products)
                 {
                     var title = product.QuerySelector(config.Product.ProductTitleSelector)?.InnerText?.Trim() ?? "";
-                    var price = product.QuerySelector(config.Product.ProductPriceSelector)?.InnerText?.Trim() ?? "";
+                    //var price = Convert.ToDecimal(product.QuerySelector(config.Product.ProductPriceSelector)?.InnerText?.Trim() ?? "");
+                    var rawPrice = product.QuerySelector(config.Product.ProductPriceSelector)?.InnerText ?? "";
+                    decimal price;
+                    string currency;
+                    ParsePriceAndCurrency(rawPrice, out price, out currency, config.Product.PriceRegex);
+                    var productPageUrl = product.QuerySelector("a")?.GetAttributeValue("href", null) ?? "";
 
                     var sku = config.ScrapProductPage
                         ? GetSkuFromProduct(product.QuerySelector("a")?.GetAttributeValue("href", null), config.Product.ProductSkuSelector)
@@ -58,8 +69,9 @@ class WebScraperService : IWebScraperService
                     {
                         Sku = sku ?? "",
                         Title = title,
-                        Price = Clean(price),
-                        CategoryUrl = categoryUrl
+                        Price = price,
+                        Currency = currency,
+                        ProductPageUrl = productPageUrl
                     });
                 }
 
@@ -72,25 +84,21 @@ class WebScraperService : IWebScraperService
         }
 
         // Deleting duplicates
-        var dedup = items
+        var distinctProducts = items
             .GroupBy(x => string.IsNullOrWhiteSpace(x.Sku) ? $"NO-SKU|{x.Title}|{x.Price}" : $"SKU|{x.Sku}")
             .Select(g => g.First())
             .ToList();
 
         // Initialize Id for each product
-        foreach (var product in dedup)
+        foreach (var product in distinctProducts)
         {
             if (string.IsNullOrEmpty(product.Id))
             {
                 product.Id = ObjectId.GenerateNewId().ToString();
             }
         }
-
-        // Save to MongoDB
-
-        await _productRepository.CreateManyAsync(dedup);
-        // Also save to CSV for backup
-        SaveCsv("test5.csv", dedup);
+        //TODO: Scraper zakonczyl scrapowanie dla sklepu x i zescrapowano y produktow w z czasie
+        return distinctProducts;
     }
 
     private string? GetSkuFromProduct(string? productUrl, string productSkuSelector)
@@ -110,22 +118,25 @@ class WebScraperService : IWebScraperService
         return doc;
     }
 
-    private static void SaveCsv(string path, IEnumerable<Product> rows)
+    private static void ParsePriceAndCurrency(string? rawPrice, out decimal amount, out string currency, string? pattern = null)
     {
-        using var sw = new StreamWriter(path);
-        sw.WriteLine("SKU,Title,Price,CategoryUrl");
-        foreach (var r in rows)
-        {
-            string q(string s) => "\"" + (s ?? "").Replace("\"", "\"\"") + "\"";
-            sw.WriteLine($"{q(r.Sku)},{q(r.Title)},{q(r.Price)},{q(r.CategoryUrl)}");
-        }
-    }
+        amount = 0m;
+        currency = "";
 
-    private static string Clean(string s)
-    {
-        if (string.IsNullOrWhiteSpace(s)) return "";
-        var decoded = WebUtility.HtmlDecode(s);
-        decoded = decoded.Replace('\u00A0', ' ').Trim();
-        return decoded;
+        if (string.IsNullOrWhiteSpace(rawPrice))
+            return;
+
+        var decoded = WebUtility.HtmlDecode(rawPrice).Replace('\u00A0', ' ').Trim();
+
+        pattern ??= @"(?<amount>[\d.,]+)\s?(?<currency>[A-Za-zżźćńółęąśŻŹĆĄŚĘŁÓŃ]+)?";
+
+        var match = Regex.Match(decoded, pattern);
+        if (!match.Success)
+            return;
+
+        var amountText = match.Groups["amount"].Value.Replace(",", ".").Trim();
+        currency = match.Groups["currency"].Value.Trim();
+
+        decimal.TryParse(amountText, NumberStyles.Any, CultureInfo.InvariantCulture, out amount);
     }
 }

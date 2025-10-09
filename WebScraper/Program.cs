@@ -34,9 +34,12 @@ class Program
                 .Build();
 
             await host.StartAsync();
-            var scraper = host.Services.GetRequiredKeyedService<IWebScraperService>(WebScraperServiceKeys.Http);
 
-            await scraper.Scrap(Shops.FashionFreak);
+            var scraper = host.Services.GetRequiredKeyedService<IWebScraperService>(WebScraperServiceKeys.Http);
+            var storage = host.Services.GetRequiredService<IStorageService>();
+
+            var products = await scraper.Scrap(Shops.FashionFreak);
+            await storage.StoreAsync(products, StorageType.Csv | StorageType.Mongo);
 
             await host.StopAsync();
         }
@@ -71,5 +74,6 @@ class Program
         services.AddKeyedSingleton<IWebScraperService, WebScraperService>(WebScraperServiceKeys.Http);
         services.AddKeyedSingleton<IWebScraperService, WebScraperSeleniumService>(WebScraperServiceKeys.Selenium);
         services.AddSingleton<IScrapConfigurationProvider, ScrapConfigurationProvider>();
+        services.AddSingleton<IStorageService, StorageService>();
     }
 }
