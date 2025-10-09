@@ -10,9 +10,9 @@ public class MongoProductRepository : IProductRepository
 {
     private readonly IMongoCollection<Product> _productsCollection;
 
-    public MongoProductRepository(IMongoCollection<Product> productsCollection)
+    public MongoProductRepository(IMongoDatabase mongoDatabase)
     {
-        _productsCollection = productsCollection;
+        _productsCollection = mongoDatabase.GetCollection<Product>("products");
     }
 
     public async Task CreateManyAsync(IEnumerable<Product> products)

@@ -21,9 +21,8 @@ class WebScraperService : IWebScraperService
         _productRepository = productRepository;
     }
 
-    public async void Scrap(string url, ScrapConfiguration scrapConfiguration = null)
+    public async Task Scrap(string url, ScrapConfiguration scrapConfiguration = null)
     {
-        try { 
         var config = scrapConfiguration ?? _scrapConfiguration.GetDefaultConfiguration(url);
 
         // Taking all category links
@@ -32,7 +31,7 @@ class WebScraperService : IWebScraperService
             .QuerySelectorAll(config.Category.CategorySelector)
             .Select(a => a.GetAttributeValue("href", null))
             .Where(h => !string.IsNullOrWhiteSpace(h))
-            .Distinct().Take(1) // USUN TO
+            .Distinct()
             .ToList();
 
         var items = new List<Product>();
@@ -88,19 +87,10 @@ class WebScraperService : IWebScraperService
         }
 
         // Save to MongoDB
-        
-        
-            await _productRepository.CreateManyAsync(dedup);
-            // Also save to CSV for backup
-            SaveCsv("test5.csv", dedup);
-        }
-        catch (Exception ex)
-        {
-            
-            throw;
-        }
-        
-      
+
+        await _productRepository.CreateManyAsync(dedup);
+        // Also save to CSV for backup
+        SaveCsv("test5.csv", dedup);
     }
 
     private string? GetSkuFromProduct(string? productUrl, string productSkuSelector)

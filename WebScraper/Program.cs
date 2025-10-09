@@ -1,12 +1,13 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using MongoDB.Driver;
 using Serilog;
 using WebScraper.Constants;
 using WebScraper.Models;
 using WebScraper.Services;
 using WebScraper.Services.Interfaces;
-using MongoDB.Driver;
 
 namespace WebScraper;
 
@@ -35,14 +36,13 @@ class Program
             await host.StartAsync();
             var scraper = host.Services.GetRequiredKeyedService<IWebScraperService>(WebScraperServiceKeys.Http);
 
-            scraper.Scrap(Shops.FashionFreak);
+            await scraper.Scrap(Shops.FashionFreak);
 
             await host.StopAsync();
         }
         catch (Exception ex)
         {
-
-            throw;
+            Console.WriteLine(ex.Message);
         }
     }
 
@@ -50,22 +50,25 @@ class Program
     {
         // Configure MongoDB settings
         services.Configure<MongoDbSettings>(configuration.GetSection("MongoDB"));
-        var mongoSettings = configuration.GetSection("MongoDB").Get<MongoDbSettings>();
 
         // Register MongoDB client and collection
-        services.AddSingleton<IMongoClient>(sp => new MongoClient(mongoSettings.ConnectionString));
+        services.AddSingleton<IMongoClient>(sp =>
+        {
+            var settings = sp.GetRequiredService<IOptions<MongoDbSettings>>().Value;
+            return new MongoClient(settings.ConnectionString);
+        });
         services.AddSingleton(sp =>
         {
+            var settings = sp.GetRequiredService<IOptions<MongoDbSettings>>().Value;
             var client = sp.GetRequiredService<IMongoClient>();
-            var database = client.GetDatabase(mongoSettings.DatabaseName);
-            return database.GetCollection<Product>(mongoSettings.ProductsCollectionName);
+            return client.GetDatabase(settings.DatabaseName);
         });
 
         // Register repositories
         services.AddSingleton<IProductRepository, MongoProductRepository>();
 
         // Register existing services
-        services.AddKeyedSingleton<IWebScraperService, WebScraperService>(WebScraperServiceKeys.Http);        
+        services.AddKeyedSingleton<IWebScraperService, WebScraperService>(WebScraperServiceKeys.Http);
         services.AddKeyedSingleton<IWebScraperService, WebScraperSeleniumService>(WebScraperServiceKeys.Selenium);
         services.AddSingleton<IScrapConfigurationProvider, ScrapConfigurationProvider>();
     }
