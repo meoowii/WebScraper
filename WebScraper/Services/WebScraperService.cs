@@ -9,21 +9,23 @@ using System.Text.RegularExpressions;
 
 namespace WebScraper.Services;
 
-class WebScraperService : IWebScraperService
+partial class WebScraperService : IWebScraperService
 {
     private readonly IScrapConfigurationProvider _scrapConfiguration;
     private readonly IProductRepository _productRepository;
     private readonly HttpClient _http = new HttpClient();
     private readonly IStorageService _storageService;
+    private readonly IHtmlLoader _loader;
 
 
     public WebScraperService(
         IScrapConfigurationProvider scrapConfiguration,
-        IProductRepository productRepository, IStorageService storageService)
+        IProductRepository productRepository, IStorageService storageService, IHtmlLoader loader)
     {
         _scrapConfiguration = scrapConfiguration;
         _productRepository = productRepository;
         _storageService = storageService;
+        _loader = loader;
     }
 
     public async Task<List<Product>> Scrap(string url, ScrapConfiguration scrapConfiguration = null)
@@ -32,7 +34,7 @@ class WebScraperService : IWebScraperService
         var config = scrapConfiguration ?? _scrapConfiguration.GetDefaultConfiguration(url);
 
         // Taking all category links
-        var start = Load(url);
+        var start = _loader.Load(url);
         var categoryLinks = start.DocumentNode
             .QuerySelectorAll(config.Category.CategorySelector)
             .Select(a => a.GetAttributeValue("href", null))
@@ -48,13 +50,12 @@ class WebScraperService : IWebScraperService
             // go through pagination until no next-page
             while (true)
             {
-                var doc = Load(currentPageUrl);
+                var doc = _loader.Load(currentPageUrl);
 
                 var products = doc.DocumentNode.QuerySelectorAll(config.Product.ProductContainerSelector);
                 foreach (var product in products)
                 {
                     var title = product.QuerySelector(config.Product.ProductTitleSelector)?.InnerText?.Trim() ?? "";
-                    //var price = Convert.ToDecimal(product.QuerySelector(config.Product.ProductPriceSelector)?.InnerText?.Trim() ?? "");
                     var rawPrice = product.QuerySelector(config.Product.ProductPriceSelector)?.InnerText ?? "";
                     decimal price;
                     string currency;
@@ -106,17 +107,17 @@ class WebScraperService : IWebScraperService
         if (productUrl is null)
             return null;
 
-        var productPage = Load(productUrl);
+        var productPage = _loader.Load(productUrl);
         return productPage.DocumentNode.QuerySelector(productSkuSelector)?.InnerText?.Trim();
     }
 
-    private HtmlDocument Load(string url)
-    {
-        var html = _http.GetStringAsync(url).Result;
-        var doc = new HtmlDocument();
-        doc.LoadHtml(html);
-        return doc;
-    }
+    //private HtmlDocument Load(string url)
+    //{
+    //    var html = _http.GetStringAsync(url).Result;
+    //    var doc = new HtmlDocument();
+    //    doc.LoadHtml(html);
+    //    return doc;
+    //}
 
     private static void ParsePriceAndCurrency(string? rawPrice, out decimal amount, out string currency, string? pattern = null)
     {
