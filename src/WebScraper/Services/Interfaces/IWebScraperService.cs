@@ -2,7 +2,7 @@
 
 namespace WebScraper.Services.Interfaces;
 
-internal interface IWebScraperService
+public interface IWebScraperService
 {
     Task<List<Product>> Scrap(string url, ScrapConfiguration scrapConfiguration = null);
 }
