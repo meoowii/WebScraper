@@ -3,16 +3,16 @@ using WebScraper.Services.Interfaces;
 
 namespace WebScraper.Services;
 
-public class HttpClientHtmlLoader : IHtmlLoader
+internal class HtmlDocumentService : IHtmlDocumentService
 {
     private readonly HttpClient _http;
 
-    public HttpClientHtmlLoader(HttpClient httpClient)
+    public HtmlDocumentService(HttpClient httpClient)
     {
         _http = httpClient;
     }
 
-    public HtmlDocument Load(string url)
+    public HtmlDocument GetHtml(string url)
     {
         var html = _http.GetStringAsync(url).Result;
 

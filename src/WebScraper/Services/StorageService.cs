@@ -37,7 +37,7 @@ internal class StorageService : IStorageService
             string Q(string s) => "\"" + (s ?? "").Replace("\"", "\"\"") + "\"";
             var priceText = r.Price.ToString(CultureInfo.InvariantCulture);
 
-            sw.WriteLine($"{Q(r.Sku)},{Q(r.Title)},{priceText},{Q(r.Currency)},{Q(r.ProductPageUrl)}");
+            sw.WriteLine($"{Q(r.Sku)},{Q(r.Title)},{priceText},{Q(r.ProductPageUrl)}");
         }
     }
 }

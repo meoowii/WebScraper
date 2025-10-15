@@ -10,12 +10,13 @@ public static class SampleHtml
 </body></html>";
 
     // Jedna karta produktu z ceną 
-    public const string OneProductCard = @"
+    public static string OneProductCard(string sku = "sku-111", string title = "Sukienka letnia", string price = "249,99 PLN")
+        => $@"
 <html><body>
   <div class='card'>
-     <a href='/p/sku-111'><span class='title'>Sukienka letnia</span></a>
-     <span class='price'>249,99 PLN</span>
-     <span class='sku-inline'>IGNORED</span>
+     <a href='/p/{sku}'><span class='title'>{title}</span></a>
+     <span class='price'>{price}</span>
+     <span class='sku-inline'>{sku}</span>
   </div>
 </body></html>";
 

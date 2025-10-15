@@ -1,31 +1,25 @@
-﻿using HtmlAgilityPack;
-using HtmlAgilityPack.CssSelectors.NetCore;
+﻿using System.Globalization;
 using System.Net;
+using System.Text.RegularExpressions;
+using HtmlAgilityPack;
+using HtmlAgilityPack.CssSelectors.NetCore;
+using MongoDB.Bson;
 using WebScraper.Models;
 using WebScraper.Services.Interfaces;
-using MongoDB.Bson;
-using System.Globalization;
-using System.Text.RegularExpressions;
 
 namespace WebScraper.Services;
 
-partial class WebScraperService : IWebScraperService
+internal class WebScraperService : IWebScraperService
 {
     private readonly IScrapConfigurationProvider _scrapConfiguration;
-    private readonly IProductRepository _productRepository;
-    private readonly HttpClient _http = new HttpClient();
-    private readonly IStorageService _storageService;
-    private readonly IHtmlLoader _loader;
-
+    private readonly IHtmlDocumentService _htmlServcie;
 
     public WebScraperService(
         IScrapConfigurationProvider scrapConfiguration,
-        IProductRepository productRepository, IStorageService storageService, IHtmlLoader loader)
+        IHtmlDocumentService htmlService)
     {
         _scrapConfiguration = scrapConfiguration;
-        _productRepository = productRepository;
-        _storageService = storageService;
-        _loader = loader;
+        _htmlServcie = htmlService;
     }
 
     public async Task<List<Product>> Scrap(string url, ScrapConfiguration scrapConfiguration = null)
@@ -34,8 +28,8 @@ partial class WebScraperService : IWebScraperService
         var config = scrapConfiguration ?? _scrapConfiguration.GetDefaultConfiguration(url);
 
         // Taking all category links
-        var start = _loader.Load(url);
-        var categoryLinks = start.DocumentNode
+        var startPage = _htmlServcie.GetHtml(url);
+        var categoryLinks = startPage.DocumentNode
             .QuerySelectorAll(config.Category.CategorySelector)
             .Select(a => a.GetAttributeValue("href", null))
             .Where(h => !string.IsNullOrWhiteSpace(h))
@@ -50,33 +44,34 @@ partial class WebScraperService : IWebScraperService
             // go through pagination until no next-page
             while (true)
             {
-                var doc = _loader.Load(currentPageUrl);
+                var paginationPage = _htmlServcie.GetHtml(currentPageUrl);
 
-                var products = doc.DocumentNode.QuerySelectorAll(config.Product.ProductContainerSelector);
+                var products = paginationPage.DocumentNode.QuerySelectorAll(config.Product.ProductContainerSelector);
                 foreach (var product in products)
                 {
-                    var title = product.QuerySelector(config.Product.ProductTitleSelector)?.InnerText?.Trim() ?? "";
-                    var rawPrice = product.QuerySelector(config.Product.ProductPriceSelector)?.InnerText ?? "";
-                    decimal price;
-                    string currency;
-                    ParsePriceAndCurrency(rawPrice, out price, out currency, config.Product.PriceRegex);
-                    var productPageUrl = product.QuerySelector("a")?.GetAttributeValue("href", null) ?? "";
+                    var productHtmlNode = config.ScrapProductPage
+                        ? GetDocumentNode(config.Product.ProductPageUrlSelector, product)
+                        : product;
 
-                    var sku = config.ScrapProductPage
-                        ? GetSkuFromProduct(product.QuerySelector("a")?.GetAttributeValue("href", null), config.Product.ProductSkuSelector)
-                        : product.QuerySelector(config.Product.ProductSkuSelector)?.InnerText?.Trim();
+                    var title = productHtmlNode.QuerySelector(config.Product.ProductTitleSelector)?.InnerText?.Trim() ?? "";
+                    var rawPrice = productHtmlNode.QuerySelector(config.Product.ProductPriceSelector)?.InnerText ?? "";
+
+                    (decimal price, string currency) = ParsePriceAndCurrency(rawPrice, config.Product.PriceRegex);
+
+                    var productPageUrl = productHtmlNode.QuerySelector(config.Product.ProductPageUrlSelector)?.GetAttributeValue("href", null) ?? "";
+
+                    var sku = productHtmlNode.QuerySelector(config.Product.ProductSkuSelector)?.InnerText?.Trim();
 
                     items.Add(new Product
                     {
                         Sku = sku ?? "",
                         Title = title,
                         Price = price,
-                        Currency = currency,
                         ProductPageUrl = productPageUrl
                     });
                 }
 
-                var nextPageUrl = doc.DocumentNode.QuerySelector(config.Category.NextPageSelector)?.GetAttributeValue("href", null);
+                var nextPageUrl = paginationPage.DocumentNode.QuerySelector(config.Category.NextPageSelector)?.GetAttributeValue("href", null);
                 if (string.IsNullOrWhiteSpace(nextPageUrl))
                     break;
 
@@ -102,42 +97,33 @@ partial class WebScraperService : IWebScraperService
         return distinctProducts;
     }
 
-    private string? GetSkuFromProduct(string? productUrl, string productSkuSelector)
+    private HtmlNode GetDocumentNode(string selector, HtmlNode product)
     {
-        if (productUrl is null)
-            return null;
+        var pageUrl = product.QuerySelector(selector)?.GetAttributeValue("href", null);
 
-        var productPage = _loader.Load(productUrl);
-        return productPage.DocumentNode.QuerySelector(productSkuSelector)?.InnerText?.Trim();
+        if (pageUrl is null)
+            return product;
+
+        return _htmlServcie.GetHtml(pageUrl).DocumentNode;
     }
 
-    //private HtmlDocument Load(string url)
-    //{
-    //    var html = _http.GetStringAsync(url).Result;
-    //    var doc = new HtmlDocument();
-    //    doc.LoadHtml(html);
-    //    return doc;
-    //}
-
-    private static void ParsePriceAndCurrency(string? rawPrice, out decimal amount, out string currency, string? pattern = null)
+    private static (decimal rawPrice, string currency) ParsePriceAndCurrency(string? rawPrice, string? pattern = null)
     {
-        amount = 0m;
-        currency = "";
-
         if (string.IsNullOrWhiteSpace(rawPrice))
-            return;
+            return (default, string.Empty);
 
         var decoded = WebUtility.HtmlDecode(rawPrice).Replace('\u00A0', ' ').Trim();
 
-        pattern ??= @"(?<amount>[\d.,]+)\s?(?<currency>[A-Za-zżźćńółęąśŻŹĆĄŚĘŁÓŃ]+)?";
-
         var match = Regex.Match(decoded, pattern);
         if (!match.Success)
-            return;
+            return (default, string.Empty); ;
 
-        var amountText = match.Groups["amount"].Value.Replace(",", ".").Trim();
-        currency = match.Groups["currency"].Value.Trim();
+        var amountText = match.Groups["price"].Value.Replace(",", ".").Replace(" ","").Trim();
 
-        decimal.TryParse(amountText, NumberStyles.Any, CultureInfo.InvariantCulture, out amount);
+        var amount = decimal.TryParse(amountText, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedAmount)
+            ? parsedAmount
+            : default;
+
+        return (amount, match.Groups["currency"].Value.Trim());
     }
 }

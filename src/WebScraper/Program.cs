@@ -75,6 +75,6 @@ class Program
         services.AddKeyedSingleton<IWebScraperService, WebScraperSeleniumService>(WebScraperServiceKeys.Selenium);
         services.AddSingleton<IScrapConfigurationProvider, ScrapConfigurationProvider>();
         services.AddSingleton<IStorageService, StorageService>();
-        services.AddHttpClient<IHtmlLoader, HttpClientHtmlLoader>();
+        services.AddHttpClient<IHtmlDocumentService, HtmlDocumentService>();
     }
 }

@@ -26,10 +26,10 @@ namespace WebScraper.Tests.Unit.Services
                 });
 
             var httpClient = new HttpClient(handlerMock.Object);
-            var loader = new HttpClientHtmlLoader(httpClient);
+            var loader = new HtmlDocumentService(httpClient);
 
             // Act
-            var doc = loader.Load("https://example.com");
+            var doc = loader.GetHtml("https://example.com");
 
             // Assert
             doc.Should().NotBeNull();
