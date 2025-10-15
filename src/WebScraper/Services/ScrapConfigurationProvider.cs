@@ -4,7 +4,7 @@ using WebScraper.Services.Interfaces;
 
 namespace WebScraper.Services;
 
-class ScrapConfigurationProvider : IScrapConfigurationProvider
+internal class ScrapConfigurationProvider : IScrapConfigurationProvider
 {
     private readonly Dictionary<string, ScrapConfiguration> _configurations;
     public ScrapConfigurationProvider()
@@ -30,11 +30,12 @@ class ScrapConfigurationProvider : IScrapConfigurationProvider
         };
         var productSelectors = new ProductSelectors
         {
+            ProductPageUrlSelector = "a",
             ProductContainerSelector = "ul.products li.product",
             ProductTitleSelector = "h2.woocommerce-loop-product__title",
             ProductPriceSelector = "span.woocommerce-Price-amount",
             ProductSkuSelector = "span.sku",
-            PriceRegex = @"(?<amount>[\d.,]+)\s?(?<currency>[A-Za-zżźćńółęąśŻŹĆĄŚĘŁÓŃ]+)"
+            PriceRegex = @"(?<price>[\s\d,\.]+)"
         };
         return new ScrapConfiguration
         { 

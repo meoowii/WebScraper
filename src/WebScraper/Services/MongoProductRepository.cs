@@ -4,7 +4,7 @@ using WebScraper.Services.Interfaces;
 
 namespace WebScraper.Services;
 
-public class MongoProductRepository : IProductRepository
+internal class MongoProductRepository : IProductRepository
 {
     private readonly IMongoCollection<Product> _productsCollection;
 

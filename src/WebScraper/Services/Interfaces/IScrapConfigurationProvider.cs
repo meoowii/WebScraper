@@ -2,7 +2,7 @@
 
 namespace WebScraper.Services.Interfaces;
 
-internal interface IScrapConfigurationProvider
+public interface IScrapConfigurationProvider
 {
     ScrapConfiguration GetDefaultConfiguration(string url);
 }

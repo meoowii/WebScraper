@@ -2,7 +2,7 @@
 
 namespace WebScraper.Services.Interfaces;
 
-internal interface IStorageService
+public interface IStorageService
 {
     Task StoreAsync(IEnumerable<Product> products, StorageType storageType);
 }
